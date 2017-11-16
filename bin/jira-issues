@@ -1,0 +1,90 @@
+#!/usr/bin/env node
+
+const program = require('commander');
+const chalk = require('chalk');
+const wrap = require('wordwrap')(80);
+const wrapTable = require('wordwrap')(50);
+const Table = require('cli-table');
+const Issue = require('./../lib/Issue');
+const util = require('./../util');
+const jira = require('./../jira')();
+
+program
+    .option('-c, --comments', 'display comments')
+    .option('-w, --worklogs', 'display worklogs')
+    .parse(process.argv);
+
+const displaySingle = issue => {
+    console.log('');
+    console.log(`${chalk.green.bold(issue.name)} (${issue.status})\t\t\t\t${chalk.yellow('Reporter:')} ${issue.reporter}`);
+    console.log(`${chalk.yellow('OE:')} ${issue.time.original} / ${chalk.yellow('RE:')} ${issue.time.remaining} / ${chalk.yellow('LOG:')} ${issue.time.logged}\t\t${chalk.yellow('Assignee:')} ${issue.assignee}`);
+    console.log('');
+    console.log(chalk.bold(wrap(util.formatText(issue.summary))));
+    console.log('');
+    console.log(wrap(util.formatText(issue.description)));
+
+    if (program.comments && issue.hasComments()) {
+        let table = new Table({
+            head: ['User', 'Comment'],
+            colWidths: [15, 61]
+        });
+        
+        issue.comments.forEach(c => table.push([ chalk.cyan(c.author), wrapTable(c.text) ]));
+        
+        console.log('');
+        console.log(chalk.yellow('Comments'));
+        console.log(table.toString());
+    }
+
+    if (program.worklogs && issue.hasWorklogs()) {
+        let table = new Table({
+            head: ['User', 'Time', 'Comment'],
+            colWidths: [15, 10, 51]
+        });
+        
+        issue.worklogs.forEach(wl => table.push([ chalk.cyan(wl.author), wl.time, wrapTable(wl.text) ]));
+        
+        console.log('');
+        console.log(chalk.yellow('Worklogs'));
+        console.log(table.toString());
+    }
+};
+
+const displayList = issues => {
+    var table = new Table({
+        head: ['Name', 'Status', 'Summary'],
+        colWidths: [10, 15, 51]
+    });
+    
+    issues.forEach(issue => {
+        table.push([ issue.name, issue.status, wrapTable(issue.summary) ]);
+    });
+    
+    console.log(table.toString());
+};
+
+let argIssues = program.args.map(arg => util.normalizeIssueName(arg));
+
+if (argIssues.length) {
+    jira.issue.getIssue({
+        issueKey: argIssues[0]
+    }, (err, issue) => {
+        if (err) {
+            console.log(err);
+        } else {
+            issue = new Issue(issue);
+            displaySingle(issue);
+        }
+    });
+} else {
+    jira.search.search({
+        jql: 'assignee = currentUser() AND resolution = Unresolved AND sprint in openSprints() ORDER BY updated DESC'
+    }, (err, issues) => {
+        if (err) {
+            console.log(err);
+        } else {
+            issues = issues.issues.map(issue => new Issue(issue));
+            displayList(issues);
+        }
+    });
+}

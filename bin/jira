@@ -1,0 +1,10 @@
+#!/usr/bin/env node
+
+const program = require('commander');
+
+program
+    .version('1.0.0')
+    .command('issues [<issue>]', 'get issue data').alias('i')
+    .command('status <issue> <comment>', 'change issue status').alias('s')
+    .command('log <issue> <time> <comment>', 'add a worklog')
+    .parse(process.argv);
